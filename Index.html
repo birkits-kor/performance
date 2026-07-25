@@ -9,25 +9,21 @@
     body { background-color: #f3f4f6; -webkit-tap-highlight-color: transparent; }
     .accordion-content { transition: max-height 0.3s ease-out; overflow: hidden; max-height: 0; }
     .accordion-content.open { max-height: 1000px; }
-    /* Hide scrollbar for clean mobile view */
     ::-webkit-scrollbar { width: 0px; background: transparent; }
   </style>
 </head>
 <body class="text-gray-800 font-sans pb-20">
   
-  <!-- 상단 헤더 -->
   <header class="bg-white shadow-sm sticky top-0 z-40 px-4 py-4 mb-4">
     <h1 class="text-xl font-bold text-gray-900 text-center">📊 통합 비즈니스 대시보드</h1>
   </header>
 
   <div class="max-w-md mx-auto px-4">
-    <!-- 로딩 스피너 -->
     <div id="loading" class="text-center py-12">
       <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-4"></div>
       <p class="text-gray-500 font-medium">데이터를 동기화 중입니다...</p>
     </div>
     
-    <!-- 첫 번째 탭: 월 손익계산 -->
     <div id="tab-profit" class="hidden animate-fade-in space-y-5">
       <div class="flex items-center justify-between mb-2">
         <h2 class="text-lg font-bold text-gray-800">최신 손익 요약</h2>
@@ -63,16 +59,13 @@
       <div id="history-container" class="space-y-3"></div>
     </div>
 
-    <!-- 두 번째 탭: 점포별 현황 -->
     <div id="tab-store" class="hidden animate-fade-in space-y-4">
       <h2 class="text-lg font-bold text-gray-800 mb-2">점포별 현황 요약</h2>
       <div id="store-container" class="space-y-3">
-        <!-- JS 동적 생성 영역 -->
       </div>
     </div>
   </div>
 
-  <!-- 모바일 하단 네비게이션 탭 -->
   <nav class="fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 flex justify-around p-3 pb-5 z-50">
     <button onclick="switchTab('profit')" id="btn-profit" class="flex flex-col items-center flex-1 text-blue-600 transition-colors">
       <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
@@ -85,8 +78,15 @@
   </nav>
 
   <script>
+    // 구글 앱스 스크립트 웹앱 URL (반드시 본인의 배포된 주소여야 합니다)
+    const API_URL = 'https://script.google.com/macros/s/AKfycbzbIJRH-XERaaneGqGib6L-FvArO6YGnQEcEmMSZs3ig7Vy09ySfweWpBLEW7zRllkWnQ/exec';
+
     document.addEventListener("DOMContentLoaded", () => {
-      google.script.run.withSuccessHandler(renderData).withFailureHandler(showError).getDashboardData();
+      // 깃허브에서는 fetch API를 이용해 구글 스크립트 데이터를 가져와야 합니다.
+      fetch(API_URL)
+        .then(response => response.json())
+        .then(data => renderData(data))
+        .catch(err => showError(err.message));
     });
 
     function switchTab(tabId) {
@@ -115,9 +115,8 @@
 
     function renderData(data) {
       document.getElementById('loading').classList.add('hidden');
-      document.getElementById('tab-profit').classList.remove('hidden'); // Default tab
+      document.getElementById('tab-profit').classList.remove('hidden');
 
-      // --- Tab 1: 월 손익계산 렌더링 ---
       if (data.profitData && data.profitData.latest) {
         const pd = data.profitData;
         const getVal = (obj, key) => obj[key] || '-';
@@ -165,7 +164,6 @@
         document.getElementById('tab-profit').innerHTML = '<p class="text-center text-gray-500 py-10">월 손익계산 데이터가 없습니다.</p>';
       }
 
-      // --- Tab 2: 점포별 현황 렌더링 ---
       const storeTab = document.getElementById('store-container');
       if (data.storeData && data.storeData.rows.length > 0) {
         let html = '';
