@@ -185,18 +185,22 @@
     .split-value { min-width: 45px; text-align: right; font-size: 12px; font-weight: 750; }
 
     .chart-wrap {
-      overflow-x: auto;
+      width: 100%;
+      overflow: hidden;
       padding: 3px 0 0;
-      scrollbar-width: thin;
     }
 
-    .chart-wrap svg { display: block; width: max(650px, 100%); height: auto; overflow: visible; }
+    .chart-wrap svg {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      height: auto;
+      overflow: visible;
+    }
     .chart-grid { stroke: #e5e7eb; stroke-width: 1; }
     .chart-zero { stroke: #9ca3af; stroke-width: 1.2; }
-    .chart-line { fill: none; stroke: var(--blue); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-    .chart-area { fill: rgba(37,99,235,.08); }
-    .chart-dot { fill: #fff; stroke: var(--blue); stroke-width: 2.5; }
-    .chart-dot.negative { stroke: var(--red); }
+    .chart-bar { fill: var(--blue); }
+    .chart-bar.negative { fill: var(--red); }
     .chart-label { fill: #667085; font-size: 11px; }
     .chart-value { fill: #344054; font-size: 10px; font-weight: 700; }
 
@@ -250,6 +254,84 @@
     .detail { padding: 11px; border-radius: 12px; background: var(--surface-soft); }
     .detail-label { color: var(--muted); font-size: 11px; }
     .detail-value { margin-top: 5px; font-size: 13px; font-weight: 750; overflow-wrap: anywhere; }
+
+    .profit-block { padding-top: 14px; }
+    .profit-block + .profit-block { margin-top: 14px; border-top: 1px solid var(--line); }
+    .profit-block-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 9px;
+    }
+    .profit-block-title strong { font-size: 12px; }
+    .profit-block-title span { color: var(--muted); font-size: 10px; text-align: right; }
+
+    details.compact-fold {
+      margin-top: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbfcfd;
+    }
+    details.compact-fold summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 11px;
+    }
+    details.compact-fold summary::-webkit-details-marker { display: none; }
+    .compact-fold-title { min-width: 0; }
+    .compact-fold-title strong { display: block; font-size: 11px; }
+    .compact-fold-title span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 9px;
+      line-height: 1.35;
+    }
+    .compact-fold-total {
+      flex: 0 0 auto;
+      font-size: 11px;
+      font-weight: 800;
+      text-align: right;
+    }
+    .compact-list {
+      padding: 0 10px 9px;
+      border-top: 1px solid var(--line);
+    }
+    .compact-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 7px 2px;
+      border-bottom: 1px dashed #e8ebef;
+      font-size: 10px;
+    }
+    .compact-row:last-child { border-bottom: 0; }
+    .compact-row span { color: var(--muted); overflow-wrap: anywhere; }
+    .compact-row strong { flex: 0 0 auto; font-size: 10px; text-align: right; }
+
+    details.annual-fold {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    details.annual-fold > summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 15px;
+    }
+    details.annual-fold > summary::-webkit-details-marker { display: none; }
+    .annual-fold-body { padding: 0 14px 14px; border-top: 1px solid var(--line); }
 
     .store-cards { display: grid; gap: 10px; }
     .store-card { padding: 15px; border: 1px solid var(--line); border-radius: 16px; }
@@ -380,7 +462,8 @@
         Math.random().toString(36).slice(2);
     }
 
-    function loadData(forceRefresh) {
+    function loadData(forceRefresh, retryCount) {
+      const attempt = Number(retryCount || 0);
       setLoading(true);
       requestSequence += 1;
       const requestId = requestSequence;
@@ -401,16 +484,29 @@
         t: String(Date.now())
       });
 
+      const retryOrFail = function(message) {
+        if (requestId !== requestSequence) return;
+        cleanupJsonp_(callbackName);
+
+        if (attempt < 2) {
+          updatedAt.textContent = '데이터 연결 재시도 중 · ' + (attempt + 2) + '/3';
+          window.setTimeout(function() {
+            loadData(forceRefresh, attempt + 1);
+          }, 900 + attempt * 700);
+          return;
+        }
+
+        showConnectionError_(message);
+      };
+
       const script = document.createElement('script');
       script.async = true;
       script.src = APPS_SCRIPT_URL + '?' + query.toString();
       script.dataset.birkitsJsonp = '1';
 
       script.onerror = function() {
-        if (requestId !== requestSequence) return;
-        cleanupJsonp_(callbackName);
-        showConnectionError_(
-          '웹앱 데이터 요청이 실패했습니다. Code.gs를 저장하고 기존 배포를 새 버전으로 업데이트했는지 확인해주세요.'
+        retryOrFail(
+          '웹앱 데이터 요청이 실패했습니다. 잠시 후 새로고침해주세요.'
         );
       };
 
@@ -419,11 +515,8 @@
 
       loadTimeout = window.setTimeout(function() {
         if (requestId !== requestSequence || !state.loading) return;
-        cleanupJsonp_(callbackName);
-        showConnectionError_(
-          '데이터 응답 시간이 초과되었습니다. Apps Script 배포가 “나로 실행 / 액세스 권한: 모든 사용자”인지 확인해주세요.'
-        );
-      }, 25000);
+        retryOrFail('데이터 응답 시간이 초과되었습니다. 잠시 후 새로고침해주세요.');
+      }, 18000);
     }
 
     function cleanupJsonp_(callbackName) {
@@ -542,7 +635,7 @@
 
         '<section class="section">',
           '<div class="section-head"><div><h2 class="section-title">최근 12개월 매출</h2><div class="section-note">실적이 입력된 월만 표시</div></div></div>',
-          lineChart(recent, 'revenue', 'won'),
+          barChart(recent, 'revenue', 'won'),
         '</section>',
 
         '<div class="two-col">',
@@ -576,8 +669,9 @@
       const data = state.data.profit;
       const year = Number(state.profitYear || first(data.years));
       const annual = data.annual.find(function(item) { return item.year === year; }) || {};
-      const months = data.monthly.filter(function(item) { return item.year === year; }).sort(function(a,b) { return b.month - a.month; });
-      const actualMonths = months.filter(function(item) { return item.status === 'actual'; }).slice().reverse();
+      const months = data.monthly.filter(function(item) { return item.year === year && item.status === 'actual'; }).sort(function(a,b) { return b.month - a.month; });
+      const actualMonths = months.slice().reverse();
+      const costGroups = getProfitCostGroups(months);
 
       return [
         '<section class="section">',
@@ -592,12 +686,22 @@
 
         '<section class="section">',
           '<div class="section-head"><div><h2 class="section-title">월별 손익 추이</h2><div class="section-note">0선을 기준으로 흑자·적자 확인</div></div></div>',
-          actualMonths.length ? lineChart(actualMonths, 'profit', 'won', true) : '<div class="empty">입력된 월 실적이 없습니다.</div>',
+          actualMonths.length ? barChart(actualMonths, 'profit', 'won', true) : '<div class="empty">입력된 월 실적이 없습니다.</div>',
         '</section>',
 
         '<section class="section">',
-          '<div class="section-head"><div><h2 class="section-title">월별 상세</h2><div class="section-note">항목을 누르면 비용 내역이 열립니다.</div></div></div>',
-          '<div class="month-list">' + (months.length ? months.map(profitMonthCard).join('') : '<div class="empty">데이터가 없습니다.</div>') + '</div>',
+          '<details class="annual-fold">',
+            '<summary>',
+              '<div><h2 class="section-title">연간 비용 전체</h2><div class="section-note">모든 비용 항목의 선택 연도 합계</div></div>',
+              '<strong>' + shortWon(sumProfitCosts(months)) + '</strong>',
+            '</summary>',
+            '<div class="annual-fold-body">' + annualCostDetails(months, costGroups) + '</div>',
+          '</details>',
+        '</section>',
+
+        '<section class="section">',
+          '<div class="section-head"><div><h2 class="section-title">월별 상세</h2><div class="section-note">모든 손익 항목을 확인할 수 있습니다. 반복 비용은 안쪽에 접혀 있습니다.</div></div></div>',
+          '<div class="month-list">' + (months.length ? months.map(function(item) { return profitMonthCard(item, costGroups); }).join('') : '<div class="empty">데이터가 없습니다.</div>') + '</div>',
         '</section>'
       ].join('');
     }
@@ -605,11 +709,11 @@
     function renderAdsPage() {
       const data = state.data.ads;
       const year = Number(state.adYear || first(data.years));
-      const months = data.monthly.filter(function(item) { return item.year === year; }).sort(function(a,b) { return b.month - a.month; });
-      const actual = months.filter(function(item) { return item.status === 'actual'; });
+      const months = data.monthly.filter(function(item) { return item.year === year && item.status === 'actual'; }).sort(function(a,b) { return b.month - a.month; });
+      const actual = months;
       const totalSales = sum(actual, 'sales');
       const totalSpend = sum(actual, 'adSpend');
-      const measured = months.find(function(item) { return item.searchRoas || item.searchConversionRevenue || item.searchCpa; }) || data.latestSearchMeasured;
+      const measured = months.find(function(item) { return item.searchRoas || item.searchConversionRevenue || item.searchCpa; }) || null;
       const chartData = actual.slice().reverse();
 
       return [
@@ -625,7 +729,7 @@
 
         '<section class="section">',
           '<div class="section-head"><div><h2 class="section-title">광고비 비율 추이</h2><div class="section-note">월 매출 대비 광고 총비용</div></div></div>',
-          chartData.length ? lineChart(chartData, 'adShare', 'percent') : '<div class="empty">입력된 광고 실적이 없습니다.</div>',
+          chartData.length ? barChart(chartData, 'adShare', 'percent') : '<div class="empty">입력된 광고 실적이 없습니다.</div>',
         '</section>',
 
         '<section class="section">',
@@ -639,7 +743,7 @@
       const data = state.data.stores;
       const year = Number(state.storeYear || first(data.years));
       const yearData = data.yearly.find(function(item) { return item.year === year; }) || { totalUnits: 0, totalSales: 0, stores: [] };
-      const months = data.monthly.filter(function(item) { return item.year === year; }).sort(function(a,b) { return b.month - a.month; });
+      const months = data.monthly.filter(function(item) { return item.year === year && (item.totalSales || item.totalUnits); }).sort(function(a,b) { return b.month - a.month; });
       const ranking = yearData.stores.slice().sort(function(a,b) { return b.sales - a.sales; });
 
       return [
@@ -660,7 +764,7 @@
 
         '<section class="section">',
           '<div class="section-head"><div><h2 class="section-title">월별 점포 매출</h2><div class="section-note">부가세 포함 판매액</div></div></div>',
-          months.length ? lineChart(months.slice().reverse(), 'totalSales', 'won') : '<div class="empty">입력된 월 실적이 없습니다.</div>',
+          months.length ? barChart(months.slice().reverse(), 'totalSales', 'won') : '<div class="empty">입력된 월 실적이 없습니다.</div>',
         '</section>',
 
         '<section class="section">',
@@ -670,34 +774,107 @@
       ].join('');
     }
 
-    function profitMonthCard(item) {
-      const costDetails = Object.keys(item.costs || {}).map(function(key) {
-        return detail(COST_LABELS[key] || key, exactWon(item.costs[key]));
+    function profitMonthCard(item, costGroups) {
+      const groups = costGroups || getProfitCostGroups([item]);
+      const variableKeys = groups.variableKeys || [];
+      const fixedKeys = groups.fixedKeys || [];
+
+      const variableCostDetails = variableKeys.map(function(key) {
+        return detail(COST_LABELS[key] || key, exactWon((item.costs || {})[key]));
       }).join('');
 
-      return '<details class="month ' + (item.status === 'planned' ? 'planned' : '') + '">' +
+      const fixedRows = fixedKeys.map(function(key) {
+        return compactRow(COST_LABELS[key] || key, exactWon((item.costs || {})[key]));
+      }).join('');
+
+      const fixedTotal = fixedKeys.reduce(function(total, key) {
+        return total + Number((item.costs || {})[key] || 0);
+      }, 0);
+
+      const storeRows = (item.storeSales || []).map(function(store) {
+        return compactRow(store.name, exactWon(store.value));
+      }).join('');
+
+      const storeTotal = (item.storeSales || []).reduce(function(total, store) {
+        return total + Number(store.value || 0);
+      }, 0);
+
+      const extraRows = (item.extraFields || []).map(function(field) {
+        return compactRow(field.label, escapeHtml(field.value || '-'));
+      }).join('');
+
+      return '<details class="month">' +
         '<summary><div class="month-summary">' +
-          '<div><div class="month-name">' + item.month + '월</div><span class="month-status ' + item.status + '">' + (item.status === 'actual' ? '실적' : '예정') + '</span></div>' +
+          '<div><div class="month-name">' + item.month + '월</div><span class="month-status actual">실적</span></div>' +
           '<div class="month-metric"><span>매출</span><strong>' + shortWon(item.revenue) + '</strong></div>' +
           '<div class="month-metric"><span>손익</span><strong class="' + signClass(item.profit) + '">' + signedWon(item.profit) + '</strong></div>' +
         '</div></summary>' +
-        '<div class="month-body"><div class="detail-grid">' +
-          detail('온라인 매출', exactWon(item.online)) +
-          detail('오프라인 매출', exactWon(item.offline)) +
-          detail('손익률', percent(item.profitMargin)) +
-          detail('판매세트', formatNumber(item.units) + '세트') +
-          detail('광고 총비용', exactWon(item.adSpend)) +
-          detail('광고비율', percent(item.adShare)) +
-          costDetails +
-        '</div></div>' +
+
+        '<div class="month-body">' +
+
+          '<div class="profit-block">' +
+            '<div class="profit-block-title"><strong>매출·손익 전체</strong><span>원본 손익표 핵심 항목</span></div>' +
+            '<div class="detail-grid">' +
+              detail('매출', exactWon(item.revenue)) +
+              detail('매출 전년 대비', signedPercent(item.revenueYoy)) +
+              detail('예상손익', exactWon(item.profit)) +
+              detail('손익 전년 대비', signedPercent(item.profitYoy)) +
+              detail('손익률', percent(item.profitMargin)) +
+              detail('판매세트', formatNumber(item.units) + '세트') +
+              detail('온라인 매출', exactWon(item.online)) +
+              detail('온라인 비중', percent(item.onlineShare)) +
+              detail('오프라인 매출', exactWon(item.offline)) +
+              detail('오프라인 비중', percent(item.offlineShare)) +
+              detail('전체 비용 합계', exactWon(item.totalCosts)) +
+              detail('광고 총비용', exactWon(item.adSpend)) +
+              detail('광고비율', percent(item.adShare)) +
+            '</div>' +
+          '</div>' +
+
+          '<div class="profit-block">' +
+            '<div class="profit-block-title"><strong>변동·주요 비용</strong><span>월마다 변하거나 실적에 직접 연동되는 항목</span></div>' +
+            '<div class="detail-grid">' + (variableCostDetails || detail('변동 비용', '없음')) + '</div>' +
+          '</div>' +
+
+          (fixedKeys.length
+            ? '<details class="compact-fold">' +
+                '<summary>' +
+                  '<div class="compact-fold-title"><strong>고정·반복 비용 ' + fixedKeys.length + '개</strong><span>기본으로 접어두고 필요할 때 확인</span></div>' +
+                  '<div class="compact-fold-total">' + shortWon(fixedTotal) + '</div>' +
+                '</summary>' +
+                '<div class="compact-list">' + fixedRows + '</div>' +
+              '</details>'
+            : '') +
+
+          ((item.storeSales || []).length
+            ? '<details class="compact-fold">' +
+                '<summary>' +
+                  '<div class="compact-fold-title"><strong>점포별 매출 ' + item.storeSales.length + '개</strong><span>손익표에 입력된 점포별 값</span></div>' +
+                  '<div class="compact-fold-total">' + shortWon(storeTotal) + '</div>' +
+                '</summary>' +
+                '<div class="compact-list">' + storeRows + '</div>' +
+              '</details>'
+            : '') +
+
+          ((item.extraFields || []).length
+            ? '<details class="compact-fold">' +
+                '<summary>' +
+                  '<div class="compact-fold-title"><strong>기타 원본 항목 ' + item.extraFields.length + '개</strong><span>별도 분류되지 않은 시트 열</span></div>' +
+                  '<div class="compact-fold-total">확인</div>' +
+                '</summary>' +
+                '<div class="compact-list">' + extraRows + '</div>' +
+              '</details>'
+            : '') +
+
+        '</div>' +
       '</details>';
     }
 
     function adMonthCard(item) {
       const hasSearch = item.searchRoas || item.searchConversionRevenue || item.searchConversionRate || item.searchCpa;
-      return '<details class="month ' + (item.status === 'planned' ? 'planned' : '') + '">' +
+      return '<details class="month">' +
         '<summary><div class="month-summary">' +
-          '<div><div class="month-name">' + item.month + '월</div><span class="month-status ' + item.status + '">' + (item.status === 'actual' ? '실적' : '예정') + '</span></div>' +
+          '<div><div class="month-name">' + item.month + '월</div><span class="month-status actual">실적</span></div>' +
           '<div class="month-metric"><span>광고비</span><strong>' + shortWon(item.adSpend) + '</strong></div>' +
           '<div class="month-metric"><span>매출 대비</span><strong>' + percent(item.adShare) + '</strong></div>' +
         '</div></summary>' +
@@ -739,6 +916,123 @@
       if (latestStore && latestStore.totalSales < 0) result.push(alertItem('bad', latestStore.label + ' 점포 매출에 환불·조정 금액이 포함되어 있습니다.'));
       if (latestAd && latestAd.adShare >= .12) result.push(alertItem('warn', latestAd.label + ' 광고비/매출 비율이 ' + percent(latestAd.adShare) + '입니다.'));
       return result;
+    }
+
+    function getProfitCostGroups(months) {
+      const records = months || [];
+      const allKeys = Object.keys(COST_LABELS);
+
+      // 성격상 고정비에 가까운 항목은 기본 접힘으로 둡니다.
+      const defaultFixed = {
+        payroll: true,
+        warehouse: true,
+        interest: true,
+        accounting: true,
+        app: true
+      };
+
+      // 실적과 직접 연동되는 비용은 값이 우연히 같아도 변동비로 유지합니다.
+      const alwaysVariable = {
+        commission: true,
+        manufacturing: true,
+        importCost: true,
+        delivery: true,
+        vat: true,
+        naverAds: true,
+        keywordTraffic: true,
+        marketingFee: true
+      };
+
+      const fixedKeys = [];
+      const variableKeys = [];
+
+      allKeys.forEach(function(key) {
+        if (defaultFixed[key]) {
+          fixedKeys.push(key);
+          return;
+        }
+
+        if (alwaysVariable[key]) {
+          variableKeys.push(key);
+          return;
+        }
+
+        const values = records
+          .map(function(item) { return Math.round(Number((item.costs || {})[key] || 0)); })
+          .filter(function(value) { return value !== 0; });
+
+        let repeated = false;
+        if (values.length >= 3) {
+          const counts = {};
+          values.forEach(function(value) {
+            counts[String(value)] = (counts[String(value)] || 0) + 1;
+          });
+          const highest = Math.max.apply(null, Object.keys(counts).map(function(value) { return counts[value]; }));
+          repeated = highest / values.length >= .7;
+        }
+
+        if (repeated) fixedKeys.push(key);
+        else variableKeys.push(key);
+      });
+
+      return {
+        fixedKeys: fixedKeys,
+        variableKeys: variableKeys
+      };
+    }
+
+    function sumProfitCosts(months) {
+      return (months || []).reduce(function(total, item) {
+        return total + Number(item.totalCosts || 0);
+      }, 0);
+    }
+
+    function annualCostDetails(months, groups) {
+      const costGroups = groups || getProfitCostGroups(months);
+      const allKeys = (costGroups.variableKeys || []).concat(costGroups.fixedKeys || []);
+      const totals = {};
+
+      allKeys.forEach(function(key) {
+        totals[key] = (months || []).reduce(function(total, item) {
+          return total + Number((item.costs || {})[key] || 0);
+        }, 0);
+      });
+
+      const visible = (costGroups.variableKeys || []).map(function(key) {
+        return detail(COST_LABELS[key] || key, exactWon(totals[key]));
+      }).join('');
+
+      const fixedRows = (costGroups.fixedKeys || []).map(function(key) {
+        return compactRow(COST_LABELS[key] || key, exactWon(totals[key]));
+      }).join('');
+
+      const fixedTotal = (costGroups.fixedKeys || []).reduce(function(total, key) {
+        return total + Number(totals[key] || 0);
+      }, 0);
+
+      return '<div class="profit-block">' +
+          '<div class="profit-block-title"><strong>변동·주요 비용 합계</strong><span>선택 연도 실제 입력 월 기준</span></div>' +
+          '<div class="detail-grid">' + (visible || detail('변동 비용', '없음')) + '</div>' +
+        '</div>' +
+        ((costGroups.fixedKeys || []).length
+          ? '<details class="compact-fold">' +
+              '<summary>' +
+                '<div class="compact-fold-title"><strong>고정·반복 비용 합계</strong><span>' + costGroups.fixedKeys.length + '개 항목</span></div>' +
+                '<div class="compact-fold-total">' + shortWon(fixedTotal) + '</div>' +
+              '</summary>' +
+              '<div class="compact-list">' + fixedRows + '</div>' +
+            '</details>'
+          : '');
+    }
+
+    function compactRow(label, value) {
+      return '<div class="compact-row"><span>' + escapeHtml(label) + '</span><strong>' + value + '</strong></div>';
+    }
+
+    function signedPercent(value) {
+      const number = Number(value || 0);
+      const sign = number > 0 ? '+' : '';
+      return sign + percent(number);
     }
 
     function alertItem(type, text) {
@@ -783,48 +1077,64 @@
       }).filter(function(item) { return item.value !== 0; }).sort(function(a,b) { return Math.abs(b.value) - Math.abs(a.value); }).slice(0, limit || 99);
     }
 
-    function lineChart(records, key, kind, showZero) {
+    function barChart(records, key, kind, showZero) {
       if (!records || !records.length) return '<div class="empty">표시할 데이터가 없습니다.</div>';
-      const width = Math.max(650, records.length * 58);
+
+      const width = 720;
       const height = 250;
-      const padX = 36;
-      const padTop = 28;
-      const padBottom = 45;
+      const padLeft = 28;
+      const padRight = 18;
+      const padTop = 30;
+      const padBottom = 42;
+      const chartWidth = width - padLeft - padRight;
       const chartHeight = height - padTop - padBottom;
       const values = records.map(function(item) { return Number(item[key] || 0); });
+
       let min = Math.min.apply(null, values);
       let max = Math.max.apply(null, values);
       if (showZero || min < 0) min = Math.min(0, min);
+      else min = 0;
       max = Math.max(0, max);
       if (max === min) max = min + 1;
 
-      const xStep = records.length === 1 ? 0 : (width - padX * 2) / (records.length - 1);
-      const y = function(value) { return padTop + (max - value) / (max - min) * chartHeight; };
-      const points = records.map(function(item, index) { return (padX + index * xStep).toFixed(1) + ',' + y(Number(item[key] || 0)).toFixed(1); }).join(' ');
+      const y = function(value) {
+        return padTop + (max - value) / (max - min) * chartHeight;
+      };
       const zeroY = y(0);
-      const areaPoints = padX + ',' + zeroY.toFixed(1) + ' ' + points + ' ' + (padX + (records.length - 1) * xStep).toFixed(1) + ',' + zeroY.toFixed(1);
+      const slotWidth = chartWidth / records.length;
+      const barWidth = Math.max(8, Math.min(38, slotWidth * .58));
 
       const grid = [0, .5, 1].map(function(p) {
         const gy = padTop + chartHeight * p;
-        return '<line class="chart-grid" x1="' + padX + '" y1="' + gy + '" x2="' + (width-padX) + '" y2="' + gy + '"></line>';
+        return '<line class="chart-grid" x1="' + padLeft + '" y1="' + gy + '" x2="' + (width - padRight) + '" y2="' + gy + '"></line>';
       }).join('');
 
-      const dots = records.map(function(item, index) {
+      const bars = records.map(function(item, index) {
         const value = Number(item[key] || 0);
-        const x = padX + index * xStep;
-        const yy = y(value);
-        const label = item.month + '월';
+        const centerX = padLeft + slotWidth * index + slotWidth / 2;
+        const valueY = y(value);
+        const rectY = Math.min(valueY, zeroY);
+        const rectHeight = Math.max(1.5, Math.abs(zeroY - valueY));
         const displayValue = kind === 'percent' ? percent(value) : shortWon(value);
-        const showValue = records.length <= 8 || index === records.length - 1 || index === 0;
-        return '<g><circle class="chart-dot ' + (value < 0 ? 'negative' : '') + '" cx="' + x.toFixed(1) + '" cy="' + yy.toFixed(1) + '" r="4"><title>' + escapeHtml(item.label + ' ' + displayValue) + '</title></circle>' +
-          '<text class="chart-label" x="' + x.toFixed(1) + '" y="' + (height-17) + '" text-anchor="middle">' + label + '</text>' +
-          (showValue ? '<text class="chart-value" x="' + x.toFixed(1) + '" y="' + Math.max(12, yy-10).toFixed(1) + '" text-anchor="middle">' + escapeHtml(displayValue) + '</text>' : '') + '</g>';
+        const showValue = records.length <= 7 || index === records.length - 1;
+        const valueLabelY = value >= 0
+          ? Math.max(12, rectY - 7)
+          : Math.min(height - padBottom - 3, rectY + rectHeight + 13);
+
+        return '<g>' +
+          '<rect class="chart-bar ' + (value < 0 ? 'negative' : '') + '" x="' + (centerX - barWidth / 2).toFixed(1) + '" y="' + rectY.toFixed(1) + '" width="' + barWidth.toFixed(1) + '" height="' + rectHeight.toFixed(1) + '" rx="4">' +
+            '<title>' + escapeHtml(item.label + ' ' + displayValue) + '</title>' +
+          '</rect>' +
+          '<text class="chart-label" x="' + centerX.toFixed(1) + '" y="' + (height - 16) + '" text-anchor="middle">' + item.month + '월</text>' +
+          (showValue ? '<text class="chart-value" x="' + centerX.toFixed(1) + '" y="' + valueLabelY.toFixed(1) + '" text-anchor="middle">' + escapeHtml(displayValue) + '</text>' : '') +
+        '</g>';
       }).join('');
 
-      return '<div class="chart-wrap"><svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="월별 추이 차트">' + grid +
-        '<line class="chart-zero" x1="' + padX + '" y1="' + zeroY.toFixed(1) + '" x2="' + (width-padX) + '" y2="' + zeroY.toFixed(1) + '"></line>' +
-        '<polygon class="chart-area" points="' + areaPoints + '"></polygon>' +
-        '<polyline class="chart-line" points="' + points + '"></polyline>' + dots + '</svg></div>';
+      return '<div class="chart-wrap"><svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="월별 막대그래프">' +
+        grid +
+        '<line class="chart-zero" x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (width - padRight) + '" y2="' + zeroY.toFixed(1) + '"></line>' +
+        bars +
+      '</svg></div>';
     }
 
     function topStore(stores, key) {
@@ -910,4 +1220,3 @@
   </script>
 </body>
 </html>
-
