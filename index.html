@@ -752,7 +752,7 @@
 
       return [
         '<section class="section">',
-          sectionHeader('월 손익', year + '년 실적과 비용 내역', yearSelect('profitYear', data.years, year)),
+          sectionHeader('연 종합', year + '년 실적과 비용 내역', yearSelect('profitYear', data.years, year)),
           '<div class="kpi-grid">',
             kpi('연 매출', shortWon(annual.revenue || 0), exactWon(annual.revenue || 0)),
             kpi('연 손익', signedWon(annual.profit || 0), '손익률 ' + percent(annual.profitMargin || 0), signClass(annual.profit || 0)),
