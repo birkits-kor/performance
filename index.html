@@ -289,6 +289,7 @@
     .rank-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #1d4ed8, #60a5fa); }
     .rank-fill.cost { background: linear-gradient(90deg, #64748b, #cbd5e1); }
     .rank-fill.store { background: linear-gradient(90deg, #047857, #6ee7b7); }
+    .rank-fill.online { background: linear-gradient(90deg, #6d28d9, #a78bfa); }
 
     .alert-list { display: grid; gap: 8px; }
     .alert {
@@ -438,7 +439,7 @@
       transform: translateX(-50%);
       width: min(100%, 920px);
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 4px;
       padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
       border-top: 1px solid var(--line);
@@ -492,6 +493,7 @@
     <button class="nav-btn" type="button" data-page="profit"><span class="nav-icon">₩</span><span class="nav-label">월손익</span></button>
     <button class="nav-btn" type="button" data-page="ads"><span class="nav-icon">◎</span><span class="nav-label">광고</span></button>
     <button class="nav-btn" type="button" data-page="stores"><span class="nav-icon">▦</span><span class="nav-label">점포</span></button>
+    <button class="nav-btn" type="button" data-page="online"><span class="nav-icon">◈</span><span class="nav-label">온라인</span></button>
   </nav>
 
   <script>
@@ -501,6 +503,7 @@
       profitYear: null,
       adYear: null,
       storeYear: null,
+      onlineYear: null,
       loading: false
     };
 
@@ -633,11 +636,16 @@
         showConnectionError_('Apps Script 데이터 형식이 올바르지 않습니다.');
         return;
       }
+      if (!payload.online) {
+        showConnectionError_('온라인 분석 데이터가 없습니다. 새 Code.gs를 저장한 뒤 웹 앱을 새 버전으로 배포해주세요.');
+        return;
+      }
 
       state.data = payload;
       state.profitYear = state.profitYear || first(payload.profit.years);
       state.adYear = state.adYear || first(payload.ads.years);
       state.storeYear = state.storeYear || first(payload.stores.years);
+      state.onlineYear = state.onlineYear || first(payload.online.years);
       appTitle.textContent = payload.appTitle || '경영 대시보드';
       updatedAt.textContent = '업데이트 ' + (payload.generatedAt || '-');
       setLoading(false);
@@ -677,6 +685,7 @@
       if (state.page === 'profit') content.innerHTML = renderProfitPage();
       else if (state.page === 'ads') content.innerHTML = renderAdsPage();
       else if (state.page === 'stores') content.innerHTML = renderStoresPage();
+      else if (state.page === 'online') content.innerHTML = renderOnlinePage();
       else content.innerHTML = renderOverviewPage();
     }
 
@@ -752,7 +761,7 @@
 
       return [
         '<section class="section">',
-          sectionHeader('연 종합', year + '년 실적과 비용 내역', yearSelect('profitYear', data.years, year)),
+          sectionHeader('월 손익', year + '년 실적과 비용 내역', yearSelect('profitYear', data.years, year)),
           '<div class="kpi-grid">',
             kpi('연 매출', shortWon(annual.revenue || 0), exactWon(annual.revenue || 0)),
             kpi('연 손익', signedWon(annual.profit || 0), '손익률 ' + percent(annual.profitMargin || 0), signClass(annual.profit || 0)),
@@ -847,6 +856,64 @@
         '<section class="section">',
           '<div class="section-head"><div><h2 class="section-title">월별 상세</h2><div class="section-note">점포별 판매액과 대수</div></div></div>',
           '<div class="month-list">' + (months.length ? months.map(storeMonthCard).join('') : '<div class="empty">데이터가 없습니다.</div>') + '</div>',
+        '</section>'
+      ].join('');
+    }
+
+    function renderOnlinePage() {
+      const data = state.data.online;
+      const year = Number(state.onlineYear || first(data.years));
+      const yearData = data.yearly.find(function(item) { return item.year === year; }) || {
+        totalSales: 0,
+        totalRevenue: 0,
+        channelTotal: 0,
+        unclassifiedSales: 0,
+        onlineShare: 0,
+        channels: []
+      };
+      const months = data.monthly.filter(function(item) {
+        return item.year === year && (item.totalSales || item.channelTotal);
+      }).sort(function(a,b) { return b.month - a.month; });
+      const ranking = (yearData.channels || []).filter(function(item) {
+        return item.sales !== 0;
+      }).sort(function(a,b) { return b.sales - a.sales; });
+      const topChannel = ranking.length ? ranking[0] : null;
+      const monthlyAverage = months.length ? yearData.totalSales / months.length : 0;
+      const hasGap = ranking.length > 0 && Math.abs(Number(yearData.unclassifiedSales || 0)) >= 1;
+
+      return [
+        '<section class="section">',
+          sectionHeader('온라인 채널 매출', year + '년 채널별 판매 분석', yearSelect('onlineYear', data.years, year)),
+          '<div class="kpi-grid">',
+            kpi('온라인 매출', shortWon(yearData.totalSales), exactWon(yearData.totalSales)),
+            kpi('전체 매출 비중', percent(yearData.onlineShare), '전체 매출 ' + shortWon(yearData.totalRevenue)),
+            kpi('1위 채널', topChannel ? escapeHtml(topChannel.name) : '-', topChannel ? shortWon(topChannel.sales) + ' · ' + percent(safeDivide(topChannel.sales, yearData.totalSales)) : '입력값 없음'),
+            kpi('월평균', shortWon(monthlyAverage), months.length + '개월 실적 기준'),
+          '</div>',
+        '</section>',
+
+        '<section class="section">',
+          '<div class="section-head"><div><h2 class="section-title">채널별 매출 순위</h2><div class="section-note">월 손익계산 월별 행 AE~AI · ' + year + '년 합계</div></div></div>',
+          rankBars(ranking.map(function(item) {
+            return {
+              name: item.name,
+              value: item.sales,
+              sub: percent(safeDivide(item.sales, yearData.totalSales))
+            };
+          }), 'online'),
+          (hasGap
+            ? '<div class="alert-list" style="margin-top:14px">' + alertItem('warn', '온라인 총매출과 월별 채널 합계의 차이가 ' + exactWon(yearData.unclassifiedSales) + ' 있습니다. 해당 월 AE~AI 참조값을 확인해주세요.') + '</div>'
+            : ''),
+        '</section>',
+
+        '<section class="section">',
+          '<div class="section-head"><div><h2 class="section-title">월별 온라인 매출</h2><div class="section-note">선택 연도의 온라인 총매출 추이</div></div></div>',
+          months.length ? barChart(months.slice().reverse(), 'totalSales', 'won') : '<div class="empty">입력된 온라인 매출이 없습니다.</div>',
+        '</section>',
+
+        '<section class="section">',
+          '<div class="section-head"><div><h2 class="section-title">월별 채널 상세</h2><div class="section-note">각 월 행 AE~AI의 채널 매출과 구성비</div></div></div>',
+          '<div class="month-list">' + (months.length ? months.map(onlineMonthCard).join('') : '<div class="empty">데이터가 없습니다.</div>') + '</div>',
         '</section>'
       ].join('');
     }
@@ -977,6 +1044,32 @@
           (activeStores.length ? activeStores.map(function(store) {
             return detail(store.name, exactWon(store.sales) + ' · ' + formatNumber(store.units) + '대');
           }).join('') : detail('점포 실적', '입력값 없음')) +
+        '</div></div>' +
+      '</details>';
+    }
+
+    function onlineMonthCard(item) {
+      const channels = (item.channels || []).filter(function(channel) {
+        return channel.sales !== 0;
+      }).sort(function(a,b) { return b.sales - a.sales; });
+      const topChannel = channels.length ? channels[0] : null;
+      const channelDetails = channels.map(function(channel) {
+        return detail(
+          channel.name,
+          exactWon(channel.sales) + ' · ' + percent(safeDivide(channel.sales, item.totalSales))
+        );
+      }).join('');
+      const hasGap = channels.length > 0 && Math.abs(Number(item.unclassifiedSales || 0)) >= 1;
+
+      return '<details class="month">' +
+        '<summary><div class="month-summary">' +
+          '<div><div class="month-name">' + item.month + '월</div><span class="month-status actual">실적</span></div>' +
+          '<div class="month-metric"><span>온라인 매출</span><strong>' + shortWon(item.totalSales) + '</strong></div>' +
+          '<div class="month-metric"><span>1위 채널</span><strong>' + (topChannel ? escapeHtml(topChannel.name) : '-') + '</strong></div>' +
+        '</div></summary>' +
+        '<div class="month-body"><div class="detail-grid">' +
+          (channelDetails || detail('채널별 실적', 'AE~AI 참조값 미입력')) +
+          (hasGap ? detail('채널 미분류', exactWon(item.unclassifiedSales)) : '') +
         '</div></div>' +
       '</details>';
     }
