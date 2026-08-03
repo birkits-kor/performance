@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="mobile-web-app-capable" content="yes">
   <title>버킷츠 대시보드</title>
-  <link rel="manifest" href="manifest.webmanifest?appv=20260803-hero-month-5">
+  <link rel="manifest" href="manifest.webmanifest?appv=20260803-first-wednesday-6">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
   <link rel="icon" href="favicon.ico">
@@ -22,7 +22,7 @@
     (function() {
       if (!('serviceWorker' in navigator) || !/^https?:$/.test(window.location.protocol)) return;
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('./service-worker.js?v=20260803-hero-month-5', {
+        navigator.serviceWorker.register('./service-worker.js?v=20260803-first-wednesday-6', {
           scope: './',
           updateViaCache: 'none'
         }).then(function(registration) {
@@ -727,9 +727,8 @@
       state.storeYear = state.storeYear || first(payload.stores.years);
       state.onlineYear = state.onlineYear || first(payload.online.years);
       const overviewMonths = getOverviewMonths(payload.profit);
-      const overviewFallback = payload.profit.latestActual || first(overviewMonths) || payload.profit.snapshot;
       if (!state.overviewPeriod || !overviewMonths.some(function(item) { return item.period === state.overviewPeriod; })) {
-        state.overviewPeriod = overviewFallback ? overviewFallback.period : '';
+        state.overviewPeriod = getDefaultOverviewPeriod(payload.profit, new Date());
       }
       appTitle.textContent = payload.appTitle || '경영 대시보드';
       updatedAt.textContent = '업데이트 ' + (payload.generatedAt || '-');
@@ -1356,6 +1355,27 @@
       return months.sort(function(a, b) {
         return String(b.period).localeCompare(String(a.period));
       });
+    }
+
+    function getDefaultOverviewPeriod(profit, now) {
+      const data = profit || {};
+      const months = getOverviewMonths(data);
+      const fallback = data.latestActual || first(months) || data.snapshot || null;
+      if (!months.length) return fallback ? fallback.period : '';
+
+      const sourceTime = now && typeof now.getTime === 'function' ? now.getTime() : NaN;
+      const date = Number.isFinite(sourceTime) ? new Date(sourceTime) : new Date();
+      const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+      const firstWednesday = 1 + ((3 - firstDay.getDay() + 7) % 7);
+
+      if (date.getDate() <= firstWednesday) {
+        const previousDate = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+        const previousPeriod = previousDate.getFullYear() + '-' + String(previousDate.getMonth() + 1).padStart(2, '0');
+        const previousMonth = months.find(function(item) { return item.period === previousPeriod; });
+        if (previousMonth) return previousMonth.period;
+      }
+
+      return fallback ? fallback.period : first(months).period;
     }
 
     function splitBar(name, ratio, value, extraClass) {
