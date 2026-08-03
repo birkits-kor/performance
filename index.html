@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="theme-color" content="#0f172a">
   <meta name="description" content="버킷츠 매출·손익·광고·점포·온라인 채널 대시보드">
   <meta name="application-name" content="버킷츠 대시보드">
@@ -11,10 +14,23 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="mobile-web-app-capable" content="yes">
   <title>버킷츠 대시보드</title>
-  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="manifest" href="manifest.webmanifest?appv=20260803-hero-month-5">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
   <link rel="icon" href="favicon.ico">
+  <script>
+    (function() {
+      if (!('serviceWorker' in navigator) || !/^https?:$/.test(window.location.protocol)) return;
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./service-worker.js?v=20260803-hero-month-5', {
+          scope: './',
+          updateViaCache: 'none'
+        }).then(function(registration) {
+          registration.update();
+        }).catch(function() {});
+      });
+    })();
+  </script>
   <style>
     :root {
       --bg: #f3f5f7;
@@ -136,6 +152,56 @@
     .hero-sub { margin-top: 8px; color: rgba(255,255,255,.78); font-size: 13px; }
     .hero-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; }
     .hero-tag { padding: 7px 10px; border-radius: 999px; background: rgba(255,255,255,.11); font-size: 12px; }
+    .hero > * { position: relative; z-index: 1; }
+    .hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .hero-top .hero-label { min-width: 0; padding-top: 10px; }
+    .overview-period-control {
+      display: grid;
+      grid-template-columns: 34px 106px 34px;
+      align-items: center;
+      gap: 5px;
+      flex: 0 0 auto;
+    }
+    .overview-period-select {
+      width: 100%;
+      min-width: 0;
+      height: 36px;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 10px;
+      padding: 0 5px;
+      background: rgba(255,255,255,.13);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      outline: none;
+    }
+    .overview-period-select option { background: #fff; color: var(--text); }
+    .overview-period-select:focus { border-color: rgba(255,255,255,.75); box-shadow: 0 0 0 3px rgba(255,255,255,.12); }
+    .overview-period-arrow {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 36px;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 10px;
+      background: rgba(255,255,255,.13);
+      color: #fff;
+      font-size: 23px;
+      font-weight: 850;
+      line-height: 1;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .overview-period-arrow:active { transform: scale(.96); background: rgba(255,255,255,.22); }
+    .overview-period-arrow:focus-visible { outline: 3px solid rgba(255,255,255,.12); border-color: rgba(255,255,255,.75); }
+    .overview-period-arrow:disabled { opacity: .28; cursor: default; transform: none; }
+
+    @media (max-width: 359px) {
+      .hero { padding-left: 15px; padding-right: 15px; }
+      .overview-period-control { grid-template-columns: 32px 92px 32px; gap: 4px; }
+      .overview-period-arrow { width: 32px; }
+      .overview-period-select { font-size: 11px; }
+    }
 
     .section {
       padding: 17px;
@@ -472,6 +538,8 @@
 
     @media (min-width: 700px) {
       .shell { padding-left: 22px; padding-right: 22px; }
+      .overview-period-control { grid-template-columns: 38px 124px 38px; gap: 6px; }
+      .overview-period-arrow { width: 38px; }
       .kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
       .store-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -511,6 +579,7 @@
     const state = {
       data: null,
       page: 'overview',
+      overviewPeriod: '',
       profitYear: null,
       adYear: null,
       storeYear: null,
@@ -657,6 +726,11 @@
       state.adYear = state.adYear || first(payload.ads.years);
       state.storeYear = state.storeYear || first(payload.stores.years);
       state.onlineYear = state.onlineYear || first(payload.online.years);
+      const overviewMonths = getOverviewMonths(payload.profit);
+      const overviewFallback = payload.profit.latestActual || first(overviewMonths) || payload.profit.snapshot;
+      if (!state.overviewPeriod || !overviewMonths.some(function(item) { return item.period === state.overviewPeriod; })) {
+        state.overviewPeriod = overviewFallback ? overviewFallback.period : '';
+      }
       appTitle.textContent = payload.appTitle || '경영 대시보드';
       updatedAt.textContent = '업데이트 ' + (payload.generatedAt || '-');
       setLoading(false);
@@ -702,58 +776,69 @@
 
     function renderOverviewPage() {
       const profit = state.data.profit;
-      const latest = profit.latestActual || profit.snapshot;
-      const recent = profit.monthly.filter(function(item) { return item.status === 'actual'; }).slice(0, 12).reverse();
-      const latestStore = state.data.stores.latestMonth;
-      const latestAd = state.data.ads.latestActual;
-      const alerts = buildAlerts(latest, latestAd, latestStore);
+      const availableMonths = getOverviewMonths(profit);
+      const fallback = profit.latestActual || profit.snapshot || first(availableMonths) || {};
+      const selected = availableMonths.find(function(item) {
+        return item.period === state.overviewPeriod;
+      }) || fallback;
+      const selectedPeriod = selected.period || '';
+      const recent = availableMonths.filter(function(item) {
+        return !selectedPeriod || item.period <= selectedPeriod;
+      }).slice(0, 12).reverse();
+      const selectedStore = (state.data.stores.monthly || []).find(function(item) {
+        return item.period === selectedPeriod;
+      }) || null;
+      const selectedAd = (state.data.ads.monthly || []).find(function(item) {
+        return item.period === selectedPeriod;
+      }) || null;
+      const alerts = buildAlerts(selected, selectedAd, selectedStore);
 
       return [
         '<section class="hero">',
-          '<div class="hero-label">' + escapeHtml(latest.label) + ' 매출</div>',
-          '<div class="hero-value">' + shortWon(latest.revenue) + '</div>',
-          '<div class="hero-sub">손익 <strong class="' + signClass(latest.profit) + '">' + signedWon(latest.profit) + '</strong> · 판매 ' + formatNumber(latest.units) + '세트</div>',
+          '<div class="hero-top"><div class="hero-label">' + escapeHtml(selected.label) + ' 매출</div>' + overviewPeriodSelect(availableMonths, selectedPeriod) + '</div>',
+          '<div class="hero-value">' + shortWon(selected.revenue) + '</div>',
+          '<div class="hero-sub">손익 <strong class="' + signClass(selected.profit) + '">' + signedWon(selected.profit) + '</strong> · 판매 ' + formatNumber(selected.units) + '세트</div>',
           '<div class="hero-tags">',
-            '<span class="hero-tag">온라인 ' + percent(latest.onlineShare) + '</span>',
-            '<span class="hero-tag">오프라인 ' + percent(latest.offlineShare) + '</span>',
-            '<span class="hero-tag">광고비율 ' + percent(latest.adShare) + '</span>',
+            '<span class="hero-tag">온라인 ' + percent(selected.onlineShare) + '</span>',
+            '<span class="hero-tag">오프라인 ' + percent(selected.offlineShare) + '</span>',
+            '<span class="hero-tag">광고비율 ' + percent(selected.adShare) + '</span>',
           '</div>',
         '</section>',
 
         '<section class="section">',
-          '<div class="section-head"><div><h2 class="section-title">핵심 지표</h2><div class="section-note">' + escapeHtml(latest.label) + ' 기준</div></div></div>',
+          '<div class="section-head"><div><h2 class="section-title">핵심 지표</h2><div class="section-note">' + escapeHtml(selected.label) + ' 기준</div></div></div>',
           '<div class="kpi-grid">',
-            kpi('예상손익', signedWon(latest.profit), '손익률 ' + percent(latest.profitMargin), signClass(latest.profit)),
-            kpi('온라인 매출', shortWon(latest.online), percent(latest.onlineShare) + ' 비중'),
-            kpi('오프라인 매출', shortWon(latest.offline), percent(latest.offlineShare) + ' 비중'),
-            kpi('광고 총비용', shortWon(latest.adSpend), '매출의 ' + percent(latest.adShare)),
+            kpi('예상손익', signedWon(selected.profit), '손익률 ' + percent(selected.profitMargin), signClass(selected.profit)),
+            kpi('온라인 매출', shortWon(selected.online), percent(selected.onlineShare) + ' 비중'),
+            kpi('오프라인 매출', shortWon(selected.offline), percent(selected.offlineShare) + ' 비중'),
+            kpi('광고 총비용', shortWon(selected.adSpend), '매출의 ' + percent(selected.adShare)),
           '</div>',
         '</section>',
 
         '<section class="section">',
-          '<div class="section-head"><div><h2 class="section-title">최근 12개월 매출</h2><div class="section-note">실적이 입력된 월만 표시</div></div></div>',
+          '<div class="section-head"><div><h2 class="section-title">최근 12개월 매출</h2><div class="section-note">선택 월까지 실적이 입력된 월만 표시</div></div></div>',
           barChart(recent, 'revenue', 'won'),
         '</section>',
 
         '<div class="two-col">',
           '<section class="section">',
-            '<div class="section-head"><div><h2 class="section-title">온라인·오프라인</h2><div class="section-note">최신 월 매출 구성</div></div></div>',
-            splitBar('온라인', latest.onlineShare, latest.online, ''),
-            splitBar('오프라인', latest.offlineShare, latest.offline, 'offline'),
+            '<div class="section-head"><div><h2 class="section-title">온라인·오프라인</h2><div class="section-note">' + escapeHtml(selected.label) + ' 매출 구성</div></div></div>',
+            splitBar('온라인', selected.onlineShare, selected.online, ''),
+            splitBar('오프라인', selected.offlineShare, selected.offline, 'offline'),
           '</section>',
 
           '<section class="section">',
-            '<div class="section-head"><div><h2 class="section-title">주요 비용</h2><div class="section-note">' + escapeHtml(latest.label) + '</div></div></div>',
-            rankBars(costRanking(latest.costs, 6), 'cost'),
+            '<div class="section-head"><div><h2 class="section-title">주요 비용</h2><div class="section-note">' + escapeHtml(selected.label) + '</div></div></div>',
+            rankBars(costRanking(selected.costs, 6), 'cost'),
           '</section>',
         '</div>',
 
-        latestStore ? '<section class="section"><div class="section-head"><div><h2 class="section-title">점포 최신 현황</h2><div class="section-note">' + escapeHtml(latestStore.label) + '</div></div></div><div class="kpi-grid">' +
-          kpi('점포 판매액', shortWon(latestStore.totalSales), exactWon(latestStore.totalSales)) +
-          kpi('점포 판매대수', formatNumber(latestStore.totalUnits) + '대', '전체 점포 합계') +
-          kpi('최다 판매점', escapeHtml(topStore(latestStore.stores, 'sales').name || '-'), shortWon(topStore(latestStore.stores, 'sales').sales || 0)) +
+        selectedStore ? '<section class="section"><div class="section-head"><div><h2 class="section-title">점포 월 현황</h2><div class="section-note">' + escapeHtml(selectedStore.label) + '</div></div></div><div class="kpi-grid">' +
+          kpi('점포 판매액', shortWon(selectedStore.totalSales), exactWon(selectedStore.totalSales)) +
+          kpi('점포 판매대수', formatNumber(selectedStore.totalUnits) + '대', '전체 점포 합계') +
+          kpi('최다 판매점', escapeHtml(topStore(selectedStore.stores, 'sales').name || '-'), shortWon(topStore(selectedStore.stores, 'sales').sales || 0)) +
           kpi('누적 점포판매', shortWon(state.data.stores.totalSales), formatNumber(state.data.stores.totalUnits) + '대') +
-          '</div></section>' : '',
+          '</div></section>' : '<section class="section"><div class="section-head"><div><h2 class="section-title">점포 월 현황</h2><div class="section-note">' + escapeHtml(selected.label) + '</div></div></div><div class="empty">선택한 월의 점포 데이터가 없습니다.</div></section>',
 
         '<section class="section">',
           '<div class="section-head"><div><h2 class="section-title">체크 포인트</h2><div class="section-note">입력된 데이터 기준 자동 확인</div></div></div>',
@@ -1238,6 +1323,41 @@
       }).join('') + '</select>';
     }
 
+    function overviewPeriodSelect(months, selected) {
+      if (!months || !months.length) return '<div class="overview-period-control"><button class="overview-period-arrow" type="button" disabled aria-label="이전 월">‹</button><select class="overview-period-select" aria-label="요약 기준 월" disabled><option>월 데이터 없음</option></select><button class="overview-period-arrow" type="button" disabled aria-label="다음 월">›</button></div>';
+      const selectedIndex = Math.max(0, months.findIndex(function(item) { return item.period === selected; }));
+      const olderMonth = months[selectedIndex + 1] || null;
+      const newerMonth = selectedIndex > 0 ? months[selectedIndex - 1] : null;
+      return '<div class="overview-period-control">' +
+        overviewPeriodArrow('이전 월', '‹', olderMonth) +
+        '<select class="overview-period-select" data-filter="overviewPeriod" aria-label="요약 기준 월">' + months.map(function(item) {
+          const compactLabel = item.year && item.month ? item.year + '. ' + item.month + '월' : item.label;
+          return '<option value="' + escapeHtml(item.period) + '" ' + (item.period === selected ? 'selected' : '') + '>' + escapeHtml(compactLabel) + '</option>';
+        }).join('') + '</select>' +
+        overviewPeriodArrow('다음 월', '›', newerMonth) +
+      '</div>';
+    }
+
+    function overviewPeriodArrow(label, symbol, month) {
+      return '<button class="overview-period-arrow" type="button" aria-label="' + label + '"' +
+        (month ? ' data-overview-period="' + escapeHtml(month.period) + '"' : ' disabled') +
+        '><span aria-hidden="true">' + symbol + '</span></button>';
+    }
+
+    function getOverviewMonths(profit) {
+      const data = profit || {};
+      const months = (data.monthly || []).filter(function(item) {
+        return item.status === 'actual' || Number(item.revenue || 0) > 0;
+      });
+      const fallback = data.latestActual || data.snapshot;
+      if (fallback && fallback.period && !months.some(function(item) { return item.period === fallback.period; })) {
+        months.push(fallback);
+      }
+      return months.sort(function(a, b) {
+        return String(b.period).localeCompare(String(a.period));
+      });
+    }
+
     function splitBar(name, ratio, value, extraClass) {
       const safeRatio = clamp(ratio, 0, 1);
       return '<div class="split-row"><div class="split-name">' + escapeHtml(name) + '</div><div class="track"><div class="fill ' + (extraClass || '') + '" style="width:' + (safeRatio * 100).toFixed(1) + '%"></div></div><div class="split-value">' + percent(ratio) + '</div></div>';
@@ -1437,7 +1557,8 @@
     content.addEventListener('change', function(event) {
       const select = event.target.closest('[data-filter]');
       if (!select) return;
-      state[select.dataset.filter] = Number(select.value);
+      const key = select.dataset.filter;
+      state[key] = key === 'overviewPeriod' ? select.value : Number(select.value);
       render();
     });
 
@@ -1461,6 +1582,12 @@
     }
 
     content.addEventListener('click', function(event) {
+      const periodButton = event.target.closest('[data-overview-period]');
+      if (periodButton) {
+        state.overviewPeriod = periodButton.dataset.overviewPeriod;
+        render();
+        return;
+      }
       const point = event.target.closest('[data-chart-point]');
       if (point) selectChartPoint(point);
     });
