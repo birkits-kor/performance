@@ -1,4 +1,4 @@
-const VERSION = 'birkits-dashboard-20260803-first-wednesday-6';
+const VERSION = 'birkits-dashboard-20260805-daily-online-units-7';
 
 self.addEventListener('install', function() {
   self.skipWaiting();
