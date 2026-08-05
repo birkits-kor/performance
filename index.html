@@ -22,7 +22,7 @@
     (function() {
       if (!('serviceWorker' in navigator) || !/^https?:$/.test(window.location.protocol)) return;
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('./service-worker.js?v=20260805-daily-online-units-7', {
+        navigator.serviceWorker.register('./service-worker.js?v=20260805-daily-zero-swipe-8', {
           scope: './',
           updateViaCache: 'none'
         }).then(function(registration) {
@@ -273,6 +273,17 @@
       min-width: 0;
       height: auto;
       overflow: visible;
+    }
+    .daily-chart-wrap {
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+    .daily-chart-wrap svg {
+      width: 620px;
+      min-width: 620px;
+      max-width: none;
     }
     .chart-grid { stroke: #e5e7eb; stroke-width: 1; }
     .chart-zero { stroke: #9ca3af; stroke-width: 1.2; }
@@ -544,6 +555,8 @@
       .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
       .store-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .bottom-nav { border: 1px solid var(--line); border-bottom: 0; border-radius: 20px 20px 0 0; }
+      .daily-chart-wrap { overflow-x: visible; }
+      .daily-chart-wrap svg { width: 100%; min-width: 0; max-width: 100%; }
     }
   </style>
 </head>
@@ -795,7 +808,7 @@
       const dailyDays = dailyMonth ? (dailyMonth.days || []).slice().sort(function(a, b) {
         return String(a.date).localeCompare(String(b.date));
       }) : [];
-      const latestDaily = dailyDays.length ? dailyDays[dailyDays.length - 1] : null;
+      const latestDaily = getLatestDailyRecord(dailyDays, selectedPeriod);
       const dailyAverageDays = getDailyAverageDays(selectedPeriod, dailyMonth);
       const dailyAverage = dailyMonth ? safeDivide(dailyMonth.totalSales, dailyAverageDays) : 0;
       const alerts = buildAlerts(selected, selectedAd, selectedStore);
@@ -1416,6 +1429,25 @@
       return Math.max(1, Number((dailyMonth || {}).activeDays || 0));
     }
 
+    function getLatestDailyRecord(days, period, now) {
+      if (!days || !days.length) return null;
+      const sortedDays = days.slice().sort(function(a, b) {
+        return String(a.date).localeCompare(String(b.date));
+      });
+      const sourceTime = now && typeof now.getTime === 'function' ? now.getTime() : NaN;
+      const date = Number.isFinite(sourceTime) ? new Date(sourceTime) : new Date();
+      const currentPeriod = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+
+      if (period === currentPeriod) {
+        const today = currentPeriod + '-' + String(date.getDate()).padStart(2, '0');
+        const availableDays = sortedDays.filter(function(day) {
+          return String(day.date || '') <= today;
+        });
+        return availableDays.length ? availableDays[availableDays.length - 1] : null;
+      }
+      return period < currentPeriod ? sortedDays[sortedDays.length - 1] : null;
+    }
+
     function splitBar(name, ratio, value, extraClass) {
       const safeRatio = clamp(ratio, 0, 1);
       return '<div class="split-row"><div class="split-name">' + escapeHtml(name) + '</div><div class="track"><div class="fill ' + (extraClass || '') + '" style="width:' + (safeRatio * 100).toFixed(1) + '%"></div></div><div class="split-value">' + percent(ratio) + '</div></div>';
@@ -1525,8 +1557,8 @@
       const unitLabel = kind === 'percent' ? '단위: %' : '단위: 원';
 
       return '<div class="chart-widget" data-chart-widget="' + chartId + '">' +
-        '<div class="chart-interaction-hint">막대를 누르면 ' + (isDailyChart ? '일별' : '월별') + ' 정확한 값이 크게 표시됩니다.</div>' +
-        '<div class="chart-wrap">' +
+        '<div class="chart-interaction-hint">' + (isDailyChart ? '모바일은 좌우로 밀어 날짜를 보고, ' : '') + '막대를 누르면 ' + (isDailyChart ? '일별' : '월별') + ' 정확한 값이 크게 표시됩니다.</div>' +
+        '<div class="chart-wrap' + (isDailyChart ? ' daily-chart-wrap' : '') + '">' +
           '<svg viewBox="0 0 ' + width + ' ' + height +
             '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="' + (isDailyChart ? '일별' : '월별') + ' 막대그래프. 막대를 선택하면 정확한 값을 확인할 수 있습니다.">' +
             '<text class="chart-axis-unit" x="' + (padLeft - 8) + '" y="12" text-anchor="end">' + unitLabel + '</text>' +
