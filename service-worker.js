@@ -1,4 +1,4 @@
-const VERSION = 'birkits-dashboard-20260805-daily-zero-swipe-8';
+const VERSION = 'birkits-dashboard-20260805-chart-scroll-only-9';
 
 self.addEventListener('install', function() {
   self.skipWaiting();

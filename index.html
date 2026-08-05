@@ -22,7 +22,7 @@
     (function() {
       if (!('serviceWorker' in navigator) || !/^https?:$/.test(window.location.protocol)) return;
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('./service-worker.js?v=20260805-daily-zero-swipe-8', {
+        navigator.serviceWorker.register('./service-worker.js?v=20260805-chart-scroll-only-9', {
           scope: './',
           updateViaCache: 'none'
         }).then(function(registration) {
@@ -53,8 +53,11 @@
     }
 
     * { box-sizing: border-box; }
-    html { background: var(--bg); scroll-behavior: smooth; }
+    html { width: 100%; max-width: 100%; overflow-x: hidden; background: var(--bg); scroll-behavior: smooth; }
     body {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
       margin: 0;
       min-height: 100vh;
       background: var(--bg);
@@ -124,7 +127,8 @@
 
     .refresh:disabled { opacity: .55; cursor: default; }
 
-    main { display: grid; gap: 14px; }
+    main { display: grid; min-width: 0; max-width: 100%; gap: 14px; }
+    main > * { min-width: 0; max-width: 100%; }
 
     .hero {
       position: relative;
@@ -204,6 +208,8 @@
     }
 
     .section {
+      min-width: 0;
+      max-width: 100%;
       padding: 17px;
       border-radius: var(--radius);
       background: var(--surface);
@@ -275,16 +281,21 @@
       overflow: visible;
     }
     .daily-chart-wrap {
+      width: 100%;
+      max-width: 100%;
       overflow-x: auto;
+      overflow-y: hidden;
       overscroll-behavior-inline: contain;
       -webkit-overflow-scrolling: touch;
       scrollbar-width: thin;
     }
-    .daily-chart-wrap svg {
+    .daily-chart-track {
       width: 620px;
       min-width: 620px;
       max-width: none;
     }
+    .daily-chart-track svg { width: 100%; min-width: 0; max-width: 100%; }
+    .chart-widget { width: 100%; min-width: 0; max-width: 100%; }
     .chart-grid { stroke: #e5e7eb; stroke-width: 1; }
     .chart-zero { stroke: #9ca3af; stroke-width: 1.2; }
     .chart-bar {
@@ -556,7 +567,7 @@
       .store-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .bottom-nav { border: 1px solid var(--line); border-bottom: 0; border-radius: 20px 20px 0 0; }
       .daily-chart-wrap { overflow-x: visible; }
-      .daily-chart-wrap svg { width: 100%; min-width: 0; max-width: 100%; }
+      .daily-chart-track { width: 100%; min-width: 0; max-width: 100%; }
     }
   </style>
 </head>
@@ -1559,6 +1570,7 @@
       return '<div class="chart-widget" data-chart-widget="' + chartId + '">' +
         '<div class="chart-interaction-hint">' + (isDailyChart ? '모바일은 좌우로 밀어 날짜를 보고, ' : '') + '막대를 누르면 ' + (isDailyChart ? '일별' : '월별') + ' 정확한 값이 크게 표시됩니다.</div>' +
         '<div class="chart-wrap' + (isDailyChart ? ' daily-chart-wrap' : '') + '">' +
+          (isDailyChart ? '<div class="daily-chart-track">' : '') +
           '<svg viewBox="0 0 ' + width + ' ' + height +
             '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="' + (isDailyChart ? '일별' : '월별') + ' 막대그래프. 막대를 선택하면 정확한 값을 확인할 수 있습니다.">' +
             '<text class="chart-axis-unit" x="' + (padLeft - 8) + '" y="12" text-anchor="end">' + unitLabel + '</text>' +
@@ -1569,6 +1581,7 @@
               '" y2="' + zeroY.toFixed(1) + '"></line>' +
             bars +
           '</svg>' +
+          (isDailyChart ? '</div>' : '') +
         '</div>' +
         '<div class="chart-selection is-empty" aria-live="polite">' +
           '<span>☝ 막대 하나를 선택해보세요</span>' +
